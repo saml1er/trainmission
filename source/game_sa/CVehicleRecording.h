@@ -27,10 +27,10 @@ struct RwStream;
 class CVehicleRecording
 {
 public:
+    static std::int32_t& NumPlayBackFiles;
     // seems like majority of them are static, like functions
     /*
     * DisplayMode
-    * NumPlayBackFiles
     * PlayBackStreamingIndex
     * PlaybackBufferSize
     * PlaybackIndex
@@ -54,7 +54,7 @@ public:
     * IsPlaybackGoingOnForCar(CVehicle*)
     * IsPlaybackPausedForCar(CVehicle*)
     */
-    static CVehicleStateEachFrame* Load(RwStream *stream, int resourceId, int totalSize);
+    static void Load(RwStream *stream, int resourceId, int totalSize);
     static std::int32_t RegisterRecordingFile(char const* name);
     /*
     * PausePlaybackRecordedCar(CVehicle*)
@@ -72,9 +72,9 @@ public:
     * SkipForwardInRecording(CVehicle*, float)
     * SkipToEndAndStopPlaybackRecordedCar(CVehicle*)
     * SmoothRecording(int)
-    * StartPlaybackRecordedCar(CVehicle*, unsigned int, bool, bool)
-    * StopPlaybackRecordedCar(CVehicle*)
     * StopPlaybackWithIndex(int)
     * UnpausePlaybackRecordedCar(CVehicle*)
     */
+    static void StartPlaybackRecordedCar(CVehicle* vehicle, int pathNumber, bool bUseCarAI, bool bLooped);
+    static void StopPlaybackRecordedCar(CVehicle* vehicle);
 };

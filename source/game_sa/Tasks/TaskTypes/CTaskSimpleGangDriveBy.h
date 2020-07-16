@@ -45,7 +45,7 @@ public:
     CVector m_vecCoords;
 
     CTaskSimpleGangDriveBy(CEntity *target, const CVector *targetPos, float abortRange, 
-        std::int8_t frequencyPercentage, bool drivebyStyle, bool seatRHS);
+        std::int8_t frequencyPercentage, std::int8_t drivebyStyle, bool seatRHS);
     ~CTaskSimpleGangDriveBy();
     CTask* Clone() override;
     eTaskType GetId() override { return TASK_SIMPLE_GANG_DRIVEBY; }

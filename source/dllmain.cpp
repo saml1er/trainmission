@@ -71,6 +71,75 @@ static void OnTrainStartsMoving(CPlayerPed* pPlayer, CVector& cjSpawnPoint) {
     }
 }
 
+DWORD GetTotalBlockSize(DWORD blockSize)
+{
+    const uint64_t IMG_BLOCK_SIZE = 2048;
+    blockSize = (blockSize + IMG_BLOCK_SIZE - 1) & ~(IMG_BLOCK_SIZE - 1);            // Round up to block size
+    return blockSize / IMG_BLOCK_SIZE;
+}
+static bool LoadVehicleRecording(const char* fileName, int& recordingId)
+{
+    RwStream* pRwStream = RwStreamOpen(rwSTREAMFILENAME, rwSTREAMREAD, fileName);
+    if (pRwStream) {
+        void* file = pRwStream->Type.file.fpFile;
+        if (RwEngineInstance->fileFuncs.rwfseek(file, 0L, SEEK_END) == 0) {
+            int fileSize = RwEngineInstance->fileFuncs.rwftell(file);
+            if (fileSize != -1L) {
+                if (RwEngineInstance->fileFuncs.rwfseek(file, 0L, SEEK_SET) == 0) {
+                    printf("file size is %d\n", fileSize);
+                    recordingId = CVehicleRecording::RegisterRecordingFile(fileName);
+                    printf("recording id = %d\n", recordingId);
+
+                    std::vector<std::int8_t> buffer;
+                    buffer.resize(fileSize);
+                    if (RwStreamRead(pRwStream, buffer.data(), fileSize) == fileSize)
+                    {
+                        RwMemory rwmem;
+                        rwmem.start = (RwUInt8*)buffer.data();
+                        rwmem.length = fileSize;
+                        RwStream* stream = RwStreamOpen(rwSTREAMMEMORY, rwSTREAMREAD, &rwmem);
+                        bool bLoaded = false;
+                        if (stream) {
+                            CVehicleRecording::Load(stream, recordingId, fileSize); // Load will close the rw stream
+                            bLoaded = true;
+                        }
+                        RwStreamClose(pRwStream, NULL);
+                        if (bLoaded)
+                            return true;
+                    }
+                    else
+                    {
+                        printf("RwStreamRead failed for file '%s'\n", fileName);
+                    }
+                }
+                else {
+                    printf("fseek (SEEK_SET) failed for file '%s'\n", fileName);
+                }
+            }
+            else {
+                printf("ftell failed for file '%s'\n", fileName);
+            }
+        }
+        else {
+            printf("fseek (SEEK_END) failed for file '%s'\n", fileName);
+        }
+    }
+    else {
+        printf("failed to open file '%s'\n", fileName);
+    }
+    RwStreamClose(pRwStream, NULL);
+    return false;
+}
+
+static void PlayMissionVehicleRecording(CVehicle* vehicle, const char* fileName, int rrrNumber)
+{
+    printf("Attempting to load file '%s'\n", fileName);
+    int recordingId;
+    if (LoadVehicleRecording(fileName, recordingId)) {
+        CVehicleRecording::StartPlaybackRecordedCar(vehicle, rrrNumber, 0, 0);
+    }
+}
+
 enum class eMissionState
 {
     NONE,
@@ -96,6 +165,19 @@ void WINAPI DllThread(void)
     clock_t wideScreenTMR = clock();
     while (1)
     {
+        if (clock() - OnePressTMR > 400) {
+            if (isKeyPressed('3'))
+            {
+                OnePressTMR = clock();
+                CPlayerPed* pPlayer = FindPlayerPed(-1);
+                if (pPlayer && pPlayer->m_pVehicle) {
+                    PlayMissionVehicleRecording(pPlayer->m_pVehicle, "carrec968.rrr", 968);
+                    //CVehicleRecording::StopPlaybackRecordedCar(v20);
+                    // CTheScripts::CleanUpThisVehicle(v26); 
+                }
+            }
+        }
+
         if (CTheScripts::OnAMissionFlag && !TheCamera.m_bWideScreenOn) {
             if (clock() - wideScreenTMR > 400)
             {
