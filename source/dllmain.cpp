@@ -79,21 +79,18 @@ DWORD GetTotalBlockSize(DWORD blockSize)
 }
 static bool LoadVehicleRecording(const char* fileName, int& recordingId)
 {
-    RwStream* pRwStream = RwStreamOpen(rwSTREAMFILENAME, rwSTREAMREAD, fileName);
-    if (pRwStream) {
-        void* file = pRwStream->Type.file.fpFile;
-        if (RwEngineInstance->fileFuncs.rwfseek(file, 0L, SEEK_END) == 0) {
-            int fileSize = RwEngineInstance->fileFuncs.rwftell(file);
+    FILE* file = fopen(fileName, "rb");
+    if (file) {
+        if (fseek(file, 0L, SEEK_END) == 0) {
+            int fileSize = ftell(file);
             if (fileSize != -1L) {
-                if (RwEngineInstance->fileFuncs.rwfseek(file, 0L, SEEK_SET) == 0) {
+                if (fseek(file, 0L, SEEK_SET) == 0) {
                     printf("file size is %d\n", fileSize);
                     recordingId = CVehicleRecording::RegisterRecordingFile(fileName);
                     printf("recording id = %d\n", recordingId);
-
                     std::vector<std::int8_t> buffer;
                     buffer.resize(fileSize);
-                    if (RwStreamRead(pRwStream, buffer.data(), fileSize) == fileSize)
-                    {
+                    if (fread(buffer.data(), 1, fileSize, file) == fileSize) {
                         RwMemory rwmem;
                         rwmem.start = (RwUInt8*)buffer.data();
                         rwmem.length = fileSize;
@@ -103,13 +100,13 @@ static bool LoadVehicleRecording(const char* fileName, int& recordingId)
                             CVehicleRecording::Load(stream, recordingId, fileSize); // Load will close the rw stream
                             bLoaded = true;
                         }
-                        RwStreamClose(pRwStream, NULL);
+                        fclose(file);
                         if (bLoaded)
                             return true;
                     }
                     else
                     {
-                        printf("RwStreamRead failed for file '%s'\n", fileName);
+                        printf("fread failed for file '%s'\n", fileName);
                     }
                 }
                 else {
@@ -123,21 +120,36 @@ static bool LoadVehicleRecording(const char* fileName, int& recordingId)
         else {
             printf("fseek (SEEK_END) failed for file '%s'\n", fileName);
         }
+        fclose(file);
     }
     else {
         printf("failed to open file '%s'\n", fileName);
     }
-    RwStreamClose(pRwStream, NULL);
     return false;
 }
 
-static void PlayMissionVehicleRecording(CVehicle* vehicle, const char* fileName, int rrrNumber)
+static void PlayMissionVehicleRecording(CVehicle* vehicle, const char* fileName)
 {
-    printf("Attempting to load file '%s'\n", fileName);
-    int recordingId;
-    if (LoadVehicleRecording(fileName, recordingId)) {
-        CVehicleRecording::StartPlaybackRecordedCar(vehicle, rrrNumber, 0, 0);
+    int rrrNumber = -1;
+    if (!sscanf(fileName, "carrec%d", &rrrNumber))
+        sscanf(fileName, "CARREC%d", &rrrNumber);
+    if (rrrNumber == -1) {
+        printf("Failed to read rrr number for file '%s'\n", fileName);
+        return;
     }
+    if (!CVehicleRecording::HasRecordingFileBeenLoaded(rrrNumber)) {
+        printf("Attempting to load file '%s'\n", fileName);
+        if (CVehicleRecording::NumPlayBackFiles >= TOTAL_RRR_MODEL_IDS) {
+            printf("Failed to load '%s'. All RRR slots are being used\n", fileName);
+            return;
+        }
+        int recordingId = 0;
+        if (!LoadVehicleRecording(fileName, recordingId)) {
+            printf("Failed to load file '%s'\n", fileName);
+            return;
+        }
+    }
+    CVehicleRecording::StartPlaybackRecordedCar(vehicle, rrrNumber, 0, 0);
 }
 
 enum class eMissionState
@@ -171,7 +183,7 @@ void WINAPI DllThread(void)
                 OnePressTMR = clock();
                 CPlayerPed* pPlayer = FindPlayerPed(-1);
                 if (pPlayer && pPlayer->m_pVehicle) {
-                    PlayMissionVehicleRecording(pPlayer->m_pVehicle, "carrec968.rrr", 968);
+                    PlayMissionVehicleRecording(pPlayer->m_pVehicle, "carrec968.rrr");
                     //CVehicleRecording::StopPlaybackRecordedCar(v20);
                     // CTheScripts::CleanUpThisVehicle(v26); 
                 }

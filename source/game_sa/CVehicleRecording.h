@@ -54,7 +54,8 @@ public:
     * IsPlaybackGoingOnForCar(CVehicle*)
     * IsPlaybackPausedForCar(CVehicle*)
     */
-    static void Load(RwStream *stream, int resourceId, int totalSize);
+    static bool HasRecordingFileBeenLoaded(std::int32_t rrrNumber);
+    static void Load(RwStream *stream, std::int32_t resourceId, std::int32_t totalSize);
     static std::int32_t RegisterRecordingFile(char const* name);
     /*
     * PausePlaybackRecordedCar(CVehicle*)
@@ -75,6 +76,6 @@ public:
     * StopPlaybackWithIndex(int)
     * UnpausePlaybackRecordedCar(CVehicle*)
     */
-    static void StartPlaybackRecordedCar(CVehicle* vehicle, int pathNumber, bool bUseCarAI, bool bLooped);
+    static void StartPlaybackRecordedCar(CVehicle* vehicle, std::int32_t pathNumber, bool bUseCarAI, bool bLooped);
     static void StopPlaybackRecordedCar(CVehicle* vehicle);
 };
