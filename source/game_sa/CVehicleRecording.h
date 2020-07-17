@@ -1,4 +1,5 @@
 #include "CVector.h"
+#include "CPathFind.h"
 
 class CVehicleStateEachFrame
 {
@@ -20,7 +21,17 @@ public:
     CVector m_vecPosn;
 };
 
+class CPath
+{
+public:
+    std::int32_t m_nNumber;
+    CVehicleStateEachFrame* m_pData;
+    std::int32_t m_nSize;
+    std::int8_t m_nRefCount;
+};
+
 VALIDATE_SIZE(CVehicleStateEachFrame, 0x20);
+VALIDATE_SIZE(CPath, 0x10);
 
 struct RwStream;
 
@@ -28,6 +39,7 @@ class CVehicleRecording
 {
 public:
     static std::int32_t& NumPlayBackFiles;
+    static CPath(&StreamingArray)[TOTAL_RRR_MODEL_IDS];
     // seems like majority of them are static, like functions
     /*
     * DisplayMode

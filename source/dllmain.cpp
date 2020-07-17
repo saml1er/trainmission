@@ -75,6 +75,7 @@ static void GetPlayerEnemies(CPlayerPed* pPlayer, float radius, std::vector<CPed
 }
 
 static void OnTrainStartsMoving(CPlayerPed* pPlayer, CVector& cjSpawnPoint, std::vector<CPed*>& enemies) {
+    CWanted::SetMaximumWantedLevel(0);
     short entitiesFound = 0;
     CEntity* entity = nullptr;
     bool bVehicles = true;
@@ -169,6 +170,7 @@ static void PlayMissionVehicleRecording(CVehicle* vehicle, const char* fileName)
             printf("Failed to load file '%s'\n", fileName);
             return;
         }
+        CVehicleRecording::StreamingArray[recordingId].m_nRefCount++; // so it always stays in memory
     }
     CVehicleRecording::StartPlaybackRecordedCar(vehicle, rrrNumber, 0, 0);
 }
@@ -182,143 +184,170 @@ enum class eMissionState
     BIKE_STOPPED,
     GETTING_OUT_OF_BIKE,
     GETTING_BACK_ON_BIKE,
-    DRIVING_TO_SMOKES_HOUSE
+    DRIVING_TO_SMOKES_HOUSE,
+    FAILED
 };
 static enum class eMissionState missionState = eMissionState::NONE;
 
-void WINAPI DllThread(void)
+static bool IsRunningWrongSideOfTheTracksMission()
 {
-    RwCamera* pRwCamera = *(RwCamera**)0xC1703C;
-
-    // Fail if RenderWare has already been started
-    if (pRwCamera)
-    {
-        // MessageBox(NULL, "gta_revered failed to load (RenderWare has already been started)", "Error", MB_ICONERROR | MB_OK);
-        // return;
-    }
-
-    DisplayConsole();
-    //InjectHooksMain();
-    clock_t OnePressTMR = clock();
-    clock_t wideScreenTMR = clock();
-    while (1)
-    {
-        if (CTheScripts::OnAMissionFlag) {
-            if (clock() - wideScreenTMR > 100) {
-                wideScreenTMR = clock();
-                CPlayerPed* pPlayer = FindPlayerPed(-1);
-                static CVehicle* bike = nullptr;
-                static CPed* bigSmoke = nullptr;
-                static std::vector<CPed*> enemies;
-
-                if (!TheCamera.m_bWideScreenOn &&
-                    missionState != eMissionState::NONE && enemies.size() > 0) {
-                    std::int32_t totalAliveEnemies = 0;
-                    for (size_t i = 0; i < enemies.size(); i++) {
-                        CPed* enemy = enemies[i];
-                        if (enemy) {
-                            if (enemy->IsAlive() && enemy->m_pAttachedTo && enemy->m_pAttachedTo->m_nType == ENTITY_TYPE_VEHICLE)
-                                totalAliveEnemies++;
-                            else
-                                enemies[i] = nullptr;
-                        }
-                    }
-                    if (totalAliveEnemies == 0) {
-                        missionState = eMissionState::ALL_ENEMIES_ARE_DEAD;
-                        enemies.resize(0);
-                    }
-                }
-
-                if (TheCamera.m_bWideScreenOn && missionState != eMissionState::NONE) {
-                    // cutscene has started, this means the train will now go out of sight
-                    // yes, this also means we lost the mission
-                }
-
-                switch (missionState)
-                {
-                case eMissionState::NONE:
-                {
-                    if (!TheCamera.m_bWideScreenOn) {
-                        // okay, cutscene has ended
-                        // The position where CJ is spawned after the train starts moving
-                        CVector cjSpawnPoint(1774.0649f, -1943.0031f, 13.5587f);
-                        if (IsEntityInRadius(pPlayer, cjSpawnPoint, 5.0f)) {
-                            missionState = eMissionState::TRAIN_MOVING;
-                            OnTrainStartsMoving(pPlayer, cjSpawnPoint, enemies);
-                        }
-                    }
-                    break;
-                }
-                case eMissionState::TRAIN_MOVING:
-                {
-                    if (pPlayer->IsInVehicleThatHasADriver()) {
-                        CPad* playerPad = pPlayer->GetPadFromPlayer();
-                        playerPad->bPlayerSafe = false;
-                        playerPad->bDisablePlayerEnterCar = true;
-                        CVector targetPoint(0.0f, 0.0f, 0.0f);
-                        pPlayer->GetTaskManager().SetTask(
-                            new CTaskSimpleGangDriveBy(nullptr, &targetPoint, 300.0f, 100, 8, true), TASK_PRIMARY_PRIMARY);
-                        PlayMissionVehicleRecording(pPlayer->m_pVehicle, "carrec968.rrr");
-                        CVehicleRecording::SetPlaybackSpeed(pPlayer->m_pVehicle, 0.8f);
-                        missionState = eMissionState::BIKE_MOVING;
-                    }
-                    break;
-                }
-                case eMissionState::ALL_ENEMIES_ARE_DEAD:
-                {
-                    if (pPlayer->IsInVehicleThatHasADriver()) {
-                        bike = pPlayer->m_pVehicle;
-                        bigSmoke = pPlayer->m_pVehicle->m_pDriver;
-                        CVehicleRecording::StopPlaybackRecordedCar(bike);
-                        missionState = eMissionState::BIKE_STOPPED;
-                    }
-                    break;
-                }
-                case eMissionState::BIKE_STOPPED:
-                {
-                    if (bike && CTheScripts::IsVehicleStopped(bike)) {
-                        pPlayer->CantBeKnockedOffBike = 0;
-                        bigSmoke->CantBeKnockedOffBike = 0;
-                        pPlayer->GetTaskManager().SetTask(
-                            new CTaskComplexLeaveCar(pPlayer->m_pVehicle, 0, 0, true, false), TASK_PRIMARY_PRIMARY);
-                        bigSmoke->GetTaskManager().SetTask(
-                            new CTaskComplexLeaveCar(pPlayer->m_pVehicle, 0, 0, true, false), TASK_PRIMARY_PRIMARY);
-                        missionState = eMissionState::GETTING_OUT_OF_BIKE;
-                    }
-                    break;
-                }
-                case eMissionState::GETTING_OUT_OF_BIKE:
-                {
-                    if (bike && bigSmoke) {
-                       if (!pPlayer->bInVehicle && !bigSmoke->bInVehicle) {
-                           pPlayer->GetTaskManager().SetTask(new CTaskComplexEnterCarAsDriver(bike), TASK_PRIMARY_PRIMARY);
-                           bigSmoke->GetTaskManager().SetTask(new CTaskComplexEnterCarAsPassenger(bike, 0, false), TASK_PRIMARY_PRIMARY);
-                           missionState = eMissionState::GETTING_BACK_ON_BIKE;
-                       }
-                       }
-                    break;
-                }
-                case eMissionState::GETTING_BACK_ON_BIKE:
-                {
-                    if (pPlayer->IsInVehicleThatHasADriver()) {
-                        MakeVehicleInvulnerable(bike, false);
-                        pPlayer->GetPadFromPlayer()->bDisablePlayerEnterCar = false;
-                        missionState = eMissionState::DRIVING_TO_SMOKES_HOUSE;
-                    }
-                    break;
-                }
-                }
+    if (CTheScripts::IsPlayerOnAMission()) {
+        for (auto script = CTheScripts::pActiveScripts; script; script = script->m_pNext) {
+            if (script->m_bIsMission && !strcmp(script->m_szName, "smoke3")) {
+                return true;
             }
         }
     }
+    return false;
 }
 
+static void Mission_Process()
+{
+    CFont::InitPerFrame(); // we replaced the call to this function in hook, so let's call it first
+    static clock_t loopTimer = clock();
+    static CVehicle* bike = nullptr;
+    static CPed* bigSmoke = nullptr;
+    static std::vector<CPed*> enemies;
+    bool bRunningWrongSideOfTheTracksMission = IsRunningWrongSideOfTheTracksMission();
+    if (!bRunningWrongSideOfTheTracksMission && missionState != eMissionState::NONE) {
+        missionState = eMissionState::NONE;
+        bike = nullptr;
+        bigSmoke = nullptr;
+        enemies.resize(0);
+        return;
+    }
+    if (clock() - loopTimer > 100 && bRunningWrongSideOfTheTracksMission) {
+        loopTimer = clock();
+        CPlayerPed* pPlayer = FindPlayerPed(-1);
+        if (!TheCamera.m_bWideScreenOn &&
+            missionState != eMissionState::NONE && enemies.size() > 0) {
+            std::int32_t totalAliveEnemies = 0;
+            for (size_t i = 0; i < enemies.size(); i++) {
+                CPed* enemy = enemies[i];
+                if (enemy) {
+                    if (enemy->IsAlive() && enemy->m_pAttachedTo && enemy->m_pAttachedTo->m_nType == ENTITY_TYPE_VEHICLE)
+                        totalAliveEnemies++;
+                    else
+                        enemies[i] = nullptr;
+                }
+            }
+            if (totalAliveEnemies == 0) {
+                missionState = eMissionState::ALL_ENEMIES_ARE_DEAD;
+                enemies.resize(0);
+            }
+        }
+
+        if (TheCamera.m_bWideScreenOn && missionState != eMissionState::NONE
+            && missionState != eMissionState::DRIVING_TO_SMOKES_HOUSE && missionState != eMissionState::FAILED) {
+            // cutscene has started, this means the train will now go out of sight
+            // yes, this also means we lost the mission
+            if (pPlayer->m_pVehicle) {
+                CVehicleRecording::StopPlaybackRecordedCar(pPlayer->m_pVehicle);
+                pPlayer->CantBeKnockedOffBike = 0;
+                CPed* bigSmoke = pPlayer->m_pVehicle->m_pDriver;
+                if (bigSmoke)
+                    bigSmoke->CantBeKnockedOffBike = 0;
+                missionState = eMissionState::FAILED;
+            }
+        }
+
+        switch (missionState)
+        {
+        case eMissionState::NONE:
+        {
+            if (!TheCamera.m_bWideScreenOn) {
+                // okay, cutscene has ended
+                // The position where CJ is spawned after the train starts moving
+                CVector cjSpawnPoint(1774.0649f, -1943.0031f, 13.5587f);
+                if (IsEntityInRadius(pPlayer, cjSpawnPoint, 5.0f)) {
+                    missionState = eMissionState::TRAIN_MOVING;
+                    OnTrainStartsMoving(pPlayer, cjSpawnPoint, enemies);
+                }
+            }
+            break;
+        }
+        case eMissionState::TRAIN_MOVING:
+        {
+            if (pPlayer->IsInVehicleThatHasADriver()) {
+                CPad* playerPad = pPlayer->GetPadFromPlayer();
+                playerPad->bPlayerSafe = false;
+                playerPad->bDisablePlayerEnterCar = true;
+                CVector targetPoint(0.0f, 0.0f, 0.0f);
+                pPlayer->GiveWeapon(WEAPON_TEC9, 99999, 0);
+                //pPlayer->SetCurrentWeapon(32);
+                pPlayer->GetTaskManager().SetTask(
+                    new CTaskSimpleGangDriveBy(nullptr, &targetPoint, 300.0f, 70, 8, true), TASK_PRIMARY_PRIMARY);
+                PlayMissionVehicleRecording(pPlayer->m_pVehicle, "carrec968.rrr");
+                CVehicleRecording::SetPlaybackSpeed(pPlayer->m_pVehicle, 0.8f);
+                missionState = eMissionState::BIKE_MOVING;
+            }
+            break;
+        }
+        case eMissionState::ALL_ENEMIES_ARE_DEAD:
+        {
+            if (pPlayer->IsInVehicleThatHasADriver()) {
+                bike = pPlayer->m_pVehicle;
+                bigSmoke = pPlayer->m_pVehicle->m_pDriver;
+                CVehicleRecording::StopPlaybackRecordedCar(bike);
+                missionState = eMissionState::BIKE_STOPPED;
+            }
+            break;
+        }
+        case eMissionState::BIKE_STOPPED:
+        {
+            if (bike && CTheScripts::IsVehicleStopped(bike)) {
+                pPlayer->CantBeKnockedOffBike = 0;
+                bigSmoke->CantBeKnockedOffBike = 0;
+                pPlayer->GetTaskManager().SetTask(
+                    new CTaskComplexLeaveCar(pPlayer->m_pVehicle, 0, 0, true, false), TASK_PRIMARY_PRIMARY);
+                bigSmoke->GetTaskManager().SetTask(
+                    new CTaskComplexLeaveCar(pPlayer->m_pVehicle, 0, 0, true, false), TASK_PRIMARY_PRIMARY);
+                missionState = eMissionState::GETTING_OUT_OF_BIKE;
+            }
+            break;
+        }
+        case eMissionState::GETTING_OUT_OF_BIKE:
+        {
+            if (bike && bigSmoke) {
+                if (!pPlayer->bInVehicle && !bigSmoke->bInVehicle) {
+                    pPlayer->GetTaskManager().SetTask(new CTaskComplexEnterCarAsDriver(bike), TASK_PRIMARY_PRIMARY);
+                    bigSmoke->GetTaskManager().SetTask(new CTaskComplexEnterCarAsPassenger(bike, 0, false), TASK_PRIMARY_PRIMARY);
+                    missionState = eMissionState::GETTING_BACK_ON_BIKE;
+                }
+                }
+            break;
+        }
+        case eMissionState::GETTING_BACK_ON_BIKE:
+        {
+            CVehicle* vehicle = pPlayer->m_pVehicle;
+            if (vehicle && vehicle->m_pDriver) {
+                MakeVehicleInvulnerable(bike, false);
+                pPlayer->GetPadFromPlayer()->bDisablePlayerEnterCar = false;
+                CWanted::SetMaximumWantedLevel(4);
+                missionState = eMissionState::DRIVING_TO_SMOKES_HOUSE;
+            }
+            break;
+        }
+        }
+    }
+
+}
+
+DWORD RETURN_ADDRESS = 0x53E977;
+void _declspec(naked) TheHook()
+{
+    __asm {
+        call Mission_Process
+        jmp RETURN_ADDRESS
+    }
+}
 BOOL APIENTRY DllMain(HMODULE hModule, DWORD  ul_reason_for_call, LPVOID lpReserved)
 {
     switch (ul_reason_for_call)
     {
     case DLL_PROCESS_ATTACH:
-        CreateThread(NULL, NULL, (LPTHREAD_START_ROUTINE)DllThread, NULL, NULL, NULL);
+        DisplayConsole();
+        HookInstall(0x53E972, TheHook);
         break;
     case DLL_THREAD_ATTACH:
         break;
