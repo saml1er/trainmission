@@ -47,7 +47,6 @@ public:
     /*
     * ChangeCarPlaybackToUseAI(CVehicle*)
     * FindIndexWithFileNameNumber(int)
-    * HasRecordingFileBeenLoaded(int)
     * Init()
     * InitAtStartOfGame()
     * InterpolateInfoForCar(CVehicle*, CVehicleStateEachFrame*, float)
@@ -57,6 +56,7 @@ public:
     static bool HasRecordingFileBeenLoaded(std::int32_t rrrNumber);
     static void Load(RwStream *stream, std::int32_t resourceId, std::int32_t totalSize);
     static std::int32_t RegisterRecordingFile(char const* name);
+    static void SetPlaybackSpeed(CVehicle* vehicle, float speed);
     /*
     * PausePlaybackRecordedCar(CVehicle*)
     * RemoveAllRecordingsThatArentUsed()
@@ -67,7 +67,6 @@ public:
     * RestoreInfoForCar(CVehicle*, CVehicleStateEachFrame*, bool)
     * RestoreInfoForMatrix(CMatrix&, CVehicleStateEachFrame*)
     * SaveOrRetrieveDataForThisFrame()
-    * SetPlaybackSpeed(CVehicle*, float)
     * SetRecordingToPointClosestToCoors(int, CVector)
     * ShutDown()
     * SkipForwardInRecording(CVehicle*, float)

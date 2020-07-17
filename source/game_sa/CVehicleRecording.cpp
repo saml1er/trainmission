@@ -26,3 +26,8 @@ void CVehicleRecording::StopPlaybackRecordedCar(CVehicle* vehicle)
 {
     plugin::Call<0x45A280, CVehicle*>(vehicle);
 }
+
+void CVehicleRecording::SetPlaybackSpeed(CVehicle* vehicle, float speed)
+{
+    plugin::Call<0x459660, CVehicle*, float>(vehicle, speed);
+}

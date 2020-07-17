@@ -91,6 +91,10 @@ tScriptRectangle *CTheScripts::IntroRectangles = reinterpret_cast<tScriptRectang
 CSprite2d *CTheScripts::ScriptSprites = reinterpret_cast<CSprite2d *>(0xA94B68);
 tScriptSearchlight *CTheScripts::ScriptSearchLightArray = reinterpret_cast<tScriptSearchlight *>(0xA94D68);
 
+void CTheScripts::CleanUpThisVehicle(CVehicle* pVehicle) {
+    plugin::CallDynGlobal<CVehicle*>(0x486670, pVehicle);
+}
+
 void CTheScripts::RemoveThisPed(CPed* ped) {
     plugin::CallDynGlobal<CPed*>(0x486240, ped);
 }
@@ -102,6 +106,10 @@ CRunningScript* CTheScripts::StartNewScript(std::uint8_t* startIP)
 
 bool CTheScripts::IsPlayerOnAMission() {
     return plugin::CallAndReturnDynGlobal<bool>(0x464D50);
+}
+
+bool CTheScripts::IsVehicleStopped(CVehicle* pVehicle) {
+    return plugin::CallAndReturnDynGlobal<bool, CVehicle*>(0x4861F0, pVehicle);
 }
 
 void CTheScripts::WipeLocalVariableMemoryForMissionScript() {
