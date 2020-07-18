@@ -6,7 +6,8 @@ class CPedGroup;
 class CDecisionMakerTypesFileLoader
 {
 public:
-    static void GetGrpDMName(std::int32_t decisionMakerId, char* name);
+    static void GetPedDMName(std::int32_t index, char* name);
+    static void GetGrpDMName(std::int32_t index, char* name);
     static std::int32_t LoadDecisionMaker(const char* filepath, std::int8_t decisionMakerType, bool bUseMissionCleanup);
 };
 

@@ -1,8 +1,13 @@
 #include "StdInc.h"
 
-void CDecisionMakerTypesFileLoader::GetGrpDMName(std::int32_t decisionMakerId, char* name)
+void CDecisionMakerTypesFileLoader::GetPedDMName(std::int32_t index, char* name)
 {
-    plugin::Call<0x600880, std::int32_t, char*>(decisionMakerId, name);
+    plugin::Call<0x600860, std::int32_t, char*>(index, name);
+}
+
+void CDecisionMakerTypesFileLoader::GetGrpDMName(std::int32_t index, char* name)
+{
+    plugin::Call<0x600880, std::int32_t, char*>(index, name);
 }
 
 std::int32_t CDecisionMakerTypesFileLoader::LoadDecisionMaker(const char* filepath, std::int8_t decisionMakerType, bool bUseMissionCleanup)
