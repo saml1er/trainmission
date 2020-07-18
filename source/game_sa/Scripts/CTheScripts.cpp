@@ -95,6 +95,18 @@ void CTheScripts::CleanUpThisVehicle(CVehicle* pVehicle) {
     plugin::CallDynGlobal<CVehicle*>(0x486670, pVehicle);
 }
 
+signed int CTheScripts::GetActualScriptThingIndex(int index, unsigned char type) {
+    return plugin::CallAndReturnDynGlobal<signed int, int, unsigned char>(0x4839A0, index, type);
+}
+
+unsigned int CTheScripts::GetNewUniqueScriptThingIndex(unsigned int index, char type) {
+    return plugin::CallAndReturnDynGlobal<unsigned int, unsigned int, char>(0x483720, index, type);
+}
+
+int CTheScripts::GetScriptIndexFromPointer(CRunningScript* thread) {
+    return plugin::CallAndReturnDynGlobal<int, CRunningScript*>(0x464D20, thread);
+}
+
 void CTheScripts::RemoveThisPed(CPed* ped) {
     plugin::CallDynGlobal<CPed*>(0x486240, ped);
 }

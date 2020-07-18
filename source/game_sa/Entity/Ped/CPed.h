@@ -23,6 +23,7 @@
 #include "ePedState.h"
 #include "CAnimBlendAssociation.h"
 #include "CFire.h"
+#include "CPedGroups.h"
 
 enum ePedCreatedBy
 {
@@ -450,6 +451,8 @@ public:
     void DeadPedMakesTyresBloody();
 	void SetModelIndex(unsigned int modelIndex);
     bool IsInVehicleThatHasADriver();
+
+    inline CPedGroup& GetGroup() { return CPedGroups::GetGroup(m_pPlayerData->m_nPlayerGroup); }
     inline CPedIntelligence* GetIntelligence() { return m_pIntelligence; }
     inline CTaskManager& GetTaskManager() { return m_pIntelligence->m_TaskMgr; }
     inline CEventGroup& GetEventGroup() { return m_pIntelligence->m_eventGroup; }

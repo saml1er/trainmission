@@ -46,6 +46,102 @@ static void PrintTasks(CPed* ped)
     }
 }
 
+// OPCODE: 074A and 0709 (yes, both opcodes behave exactly the same)
+static void AddDecisionMakerEventResponse(std::int32_t decisionMakerId, std::int32_t eventType, std::int32_t taskId,
+    float respect, float hate, float like, float dislike, bool inCar, bool onFoot)
+{
+    float responseChances[4];
+    responseChances[2] = respect;
+    responseChances[3] = hate;
+    responseChances[1] = like;
+    responseChances[0] = dislike;
+
+    std::int32_t flags[2];
+    flags[1] = inCar;
+    flags[0] = onFoot;
+    CDecisionMakerTypes::GetInstance()->AddEventResponse(decisionMakerId, eventType, taskId, responseChances, flags);
+}
+
+// OPCODE: 0688
+static void TogglePedThreadScanner(CPed* ped, bool bScanAllowedScriptPed, bool bScanAllowedInVehicle, bool bScanAllowedScriptedTask)
+{
+    if (ped) {
+        CTaskSimpleTogglePedThreatScanner task(bScanAllowedScriptPed, bScanAllowedInVehicle, bScanAllowedScriptedTask);
+        task.ProcessPed(ped);
+    }
+    else {
+        CTask* task = new CTaskSimpleTogglePedThreatScanner(bScanAllowedScriptPed, bScanAllowedInVehicle, bScanAllowedScriptedTask);
+        CTaskSequences::AddTaskToActiveSequence(task);
+    }
+}
+
+// OPCODE: 060B
+static void SetPedDecisionMaker(CPed* ped, std::int32_t decisionMakerId = -1)
+{
+    ped->GetIntelligence()->SetPedDecisionMakerType(decisionMakerId);
+}
+
+// OPCODE: 06AD
+static void SetGroupDecisionMaker(CPedGroup& pedGroup, std::int32_t decisionMakerId = -1)
+{
+    pedGroup.GetIntelligence().SetGroupDecisionMakerType(decisionMakerId);
+}
+
+// OPCODE: 077A
+static void SetPedRelationship(CPed* ped, std::int32_t acquaintanceID, ePedType pedType)
+{
+    ped->m_acquaintance.SetAsAcquaintance(acquaintanceID, CPedType::GetPedFlag(pedType));
+}
+
+// OPCODE: 0749
+static void ClearGroupDecisionMakerEventResponse(std::int32_t decisionMakerId, eEventType eventId)
+{
+    if (decisionMakerId >= 0 && decisionMakerId < TOTAL_DECISION_MAKERS)
+        CDecisionMakerTypes::GetInstance()->FlushDecisionMakerEventResponse(decisionMakerId, eventId);
+}
+
+// OPCODE: 06AE
+static void LoadGroupDecisionMaker(std::int32_t decisionMakerId, CRunningScript* script)
+{
+    char grpDMName[256];
+    CDecisionMakerTypesFileLoader::GetGrpDMName(decisionMakerId, grpDMName);
+    decisionMakerId = CDecisionMakerTypesFileLoader::LoadDecisionMaker(grpDMName, 1, script->m_bUseMissionCleanup);
+    std::int32_t decisionMakerScriptIndex = CTheScripts::GetNewUniqueScriptThingIndex(decisionMakerId, SCRIPT_THING_DECISION_MAKER);
+    if (script->m_bUseMissionCleanup)
+        CTheScripts::MissionCleanUp.AddEntityToList(decisionMakerScriptIndex, MISSION_CLEANUP_ENTITY_TYPE_DECISION_MAKER);
+}
+
+// OPCODE: 0631
+static bool SetGroupMember(std::int32_t groupId, CPed* ped)
+{
+    if (groupId >= 0 && groupId < TOTAL_PED_GROUPS) {
+        CTask* pTaskComplexBeInGroup = new CTaskComplexBeInGroup(groupId, false);
+        CEventScriptCommand eventScriptCommand(TASK_PRIMARY_PRIMARY, pTaskComplexBeInGroup, false);
+        ped->GetEventGroup().Add(&eventScriptCommand, false);
+        CPedGroup& pedGroup = CPedGroups::GetGroup(groupId);
+        CPedGroupMembership& groupMembership = pedGroup.GetMembership();
+        if (groupMembership.CountMembersExcludingLeader() >= 7) {
+            if (groupMembership.GetLeader() && groupMembership.GetLeader()->IsPlayer()) 
+                groupMembership.RemoveNFollowers(1);
+        }
+        groupMembership.AddFollower(ped);
+        pedGroup.Process();
+        // This is where we should check if the leader is in a vehicle, but it's enough for the train mission
+        return true;
+    }
+    return false;
+}
+
+// OPCODE: 09DD
+static bool MakeRoomInPlayerGroup(std::int32_t spaceRequired)
+{
+    std::uint8_t scriptLimitToGangSize = FindPlayerPed()->m_pPlayerData->m_nScriptLimitToGangSize;
+    CPedGroupMembership& groupMembership = FindPlayerPed()->GetGroup().GetMembership();
+    std::int32_t followersToRemove = groupMembership.CountMembersExcludingLeader() - scriptLimitToGangSize - spaceRequired;
+    if (followersToRemove > 0) 
+        groupMembership.RemoveNFollowers(followersToRemove);
+}
+
 static bool IsEntityInRadius(CEntity* entity, CVector& point, float radius) {
     return (point - entity->GetPosition()).SquaredMagnitude() < radius * radius;
 }
@@ -204,6 +300,26 @@ static bool IsRunningWrongSideOfTheTracksMission()
 static void Mission_Process()
 {
     CFont::InitPerFrame(); // we replaced the call to this function in hook, so let's call it first
+    /*
+    static clock_t onePressTimer = clock();
+    if (clock() - onePressTimer > 400 && isKeyPressed('3'))
+    {
+        onePressTimer = clock();
+        CPlayerPed* pPlayer = FindPlayerPed(-1);
+        CVehicle* vehicle = pPlayer->m_pVehicle;
+        if (vehicle) {
+            for (unsigned char i = 0; i < vehicle->m_nNumPassengers; i++) {
+                CPed* ped = vehicle->m_apPassengers[i];
+                if (ped) {
+                    printf("\n\n");
+                    PrintTasks(ped);
+                }
+            }
+        }
+    }
+    return;
+    */
+
     static clock_t loopTimer = clock();
     static CVehicle* bike = nullptr;
     static CPed* bigSmoke = nullptr;
@@ -274,7 +390,7 @@ static void Mission_Process()
                 playerPad->bDisablePlayerEnterCar = true;
                 CVector targetPoint(0.0f, 0.0f, 0.0f);
                 pPlayer->GiveWeapon(WEAPON_TEC9, 99999, 0);
-                //pPlayer->SetCurrentWeapon(32);
+                pPlayer->SetCurrentWeapon(32);
                 pPlayer->GetTaskManager().SetTask(
                     new CTaskSimpleGangDriveBy(nullptr, &targetPoint, 300.0f, 70, 8, true), TASK_PRIMARY_PRIMARY);
                 PlayMissionVehicleRecording(pPlayer->m_pVehicle, "carrec968.rrr");
