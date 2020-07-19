@@ -252,21 +252,61 @@ static void GetPlayerEnemies(CPlayerPed* pPlayer, float radius, std::vector<CPed
     printf("Found %d enemies\n", enemies.size());
 }
 
-static void UpdateDriveByTargetEnemy(CPlayerPed* player, std::vector<CPed*>& enemies)
+struct CWeaponSavedInfo
 {
-    CPed* enemy = GetNearestMissionEnemy(player, enemies);
-    if (enemy) {
-        eWeaponType weaponType = player->GetActiveWeapon().m_nType;
-        auto skill = player->GetWeaponSkill(weaponType);
-        auto weaponInfo = CWeaponInfo::GetWeaponInfo(weaponType, skill);
-        weaponInfo->m_fWeaponRange = 7.0f;
-        printf("m_fTargetRange, >m_fWeaponRange = %f, %f | skill = %d\n", weaponInfo->m_fTargetRange, weaponInfo->m_fWeaponRange, skill);
-        /*auto task = static_cast<CTaskSimpleGangDriveBy*>(player->GetTaskManager().FindTaskByType(TASK_PRIMARY_PRIMARY, TASK_SIMPLE_GANG_DRIVEBY));
-        if (task) {
-            task->m_pTargetEntity = enemy;
-        }*/
-    }
+    eWeaponType weaponType = WEAPON_UNARMED;
+    bool wasInSlot = false;
+    float weaponRange = 0.0f;
+    float targetRange = 0.0f;
+    std::uint32_t totalAmmo = 0;
+};
 
+static CWeaponSavedInfo weaponSavedInfo;
+
+static void SetWeaponRange(CPlayerPed* player, float weaponRange)
+{
+    eWeaponType weaponType = player->GetActiveWeapon().m_nType;
+    auto skill = player->GetWeaponSkill(weaponType);
+    auto weaponInfo = CWeaponInfo::GetWeaponInfo(weaponType, skill);
+    weaponInfo->m_fWeaponRange = weaponRange;
+
+}
+
+static void RestoreWeaponInfo(CPed* ped)
+{
+    if (weaponSavedInfo.weaponType != WEAPON_UNARMED) {
+        eWeaponType weaponType = weaponSavedInfo.weaponType;
+        auto weaponInfo = CWeaponInfo::GetWeaponInfo(weaponType, 1);
+        weaponInfo->m_fWeaponRange = weaponSavedInfo.weaponRange;
+        weaponInfo->m_fTargetRange = weaponSavedInfo.targetRange;
+        if (ped) {
+            CWeapon& weapon = ped->m_aWeapons[ped->GetWeaponSlot(weaponType)];
+            if (weapon.m_nType == weaponType) {
+                weapon.m_nTotalAmmo = weaponSavedInfo.totalAmmo;
+            }
+        }
+    }
+}
+
+static void GivePedWeapon(CPed* ped, eModelID modelId, eWeaponType weaponType, float weaponRange)
+{
+    CStreaming::RequestModel(modelId, STREAMING_MISSION_REQUIRED | STREAMING_KEEP_IN_MEMORY);
+    CStreaming::LoadAllRequestedModels(false);
+
+    // so we can restore the weapon info when mission ends
+    if (ped->DoWeHaveWeaponAvailable(weaponType)) {
+        CWeapon& weapon = ped->m_aWeapons[ped->GetWeaponSlot(weaponType)];
+        if (weapon.m_nType == weaponType) 
+            weaponSavedInfo.wasInSlot = true;
+        weaponSavedInfo.totalAmmo = weapon.m_nTotalAmmo;
+    }
+    auto weaponInfo = CWeaponInfo::GetWeaponInfo(weaponType, 1);
+    weaponSavedInfo.weaponType = weaponType;
+    weaponSavedInfo.weaponRange = weaponInfo->m_fWeaponRange;
+    weaponSavedInfo.targetRange = weaponInfo->m_fTargetRange;
+    weaponInfo->m_fWeaponRange = weaponRange;
+    ped->GiveWeapon(weaponType, 99999, 0);
+    ped->SetCurrentWeapon(weaponType);
 }
 
 static void OnTrainStartsMoving(CPlayerPed* pPlayer, CVector& cjSpawnPoint, std::vector<CPed*>& enemies, CBike**pOutBike) {
@@ -292,8 +332,7 @@ static void OnTrainStartsMoving(CPlayerPed* pPlayer, CVector& cjSpawnPoint, std:
 
         enemies.reserve(4);
         GetPlayerEnemies(pPlayer, 150.0f, enemies);
-        pPlayer->GiveWeapon(WEAPON_TEC9, 99999, 0);
-        //pPlayer->SetCurrentWeapon(32);
+        GivePedWeapon(pPlayer, MODEL_TEC9, WEAPON_TEC9, 8.0f);
     }
 }
 
@@ -423,6 +462,7 @@ static void Mission_Process()
         // cutscene has started, this means the train will now go out of sight
         // yes, this also means we lost the mission
         CPlayerPed* pPlayer = FindPlayerPed(-1);
+        RestoreWeaponInfo(pPlayer);
         if (pPlayer->m_pVehicle) {
             CVehicleRecording::StopPlaybackRecordedCar(pPlayer->m_pVehicle);
             pPlayer->CantBeKnockedOffBike = 0;
@@ -447,8 +487,6 @@ static void Mission_Process()
                 enemies.resize(0);
             }
         }
-
-        UpdateDriveByTargetEnemy(pPlayer, enemies);
 
         switch (missionState)
         {
@@ -485,6 +523,11 @@ static void Mission_Process()
                     missionState = eMissionState::BIKE_MOVING;
                 }
             }
+            break;
+        }
+        case eMissionState::BIKE_MOVING:
+        {
+            SetWeaponRange(pPlayer, 8.0f);
             break;
         }
         case eMissionState::ALL_ENEMIES_ARE_DEAD:
@@ -528,6 +571,7 @@ static void Mission_Process()
                 MakeVehicleInvulnerable(bike, false);
                 pPlayer->GetPadFromPlayer()->bDisablePlayerEnterCar = false;
                 CWanted::SetMaximumWantedLevel(4);
+                RestoreWeaponInfo(pPlayer);
                 missionState = eMissionState::DRIVING_TO_SMOKES_HOUSE;
             }
             break;
