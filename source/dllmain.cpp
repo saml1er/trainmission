@@ -249,7 +249,6 @@ static void GetPlayerEnemies(CPlayerPed* pPlayer, float radius, std::vector<CPed
             }
         }
     }
-    printf("Found %d enemies\n", enemies.size());
 }
 
 struct CWeaponSavedInfo
@@ -263,20 +262,11 @@ struct CWeaponSavedInfo
 
 static CWeaponSavedInfo weaponSavedInfo;
 
-static void SetWeaponRange(CPlayerPed* player, float weaponRange)
-{
-    eWeaponType weaponType = player->GetActiveWeapon().m_nType;
-    auto skill = player->GetWeaponSkill(weaponType);
-    auto weaponInfo = CWeaponInfo::GetWeaponInfo(weaponType, skill);
-    weaponInfo->m_fWeaponRange = weaponRange;
-
-}
-
 static void RestoreWeaponInfo(CPed* ped)
 {
     if (weaponSavedInfo.weaponType != WEAPON_UNARMED) {
         eWeaponType weaponType = weaponSavedInfo.weaponType;
-        auto weaponInfo = CWeaponInfo::GetWeaponInfo(weaponType, 1);
+        auto weaponInfo = CWeaponInfo::GetWeaponInfo(weaponType, ped->GetWeaponSkill(weaponType));
         weaponInfo->m_fWeaponRange = weaponSavedInfo.weaponRange;
         weaponInfo->m_fTargetRange = weaponSavedInfo.targetRange;
         if (ped) {
@@ -288,19 +278,20 @@ static void RestoreWeaponInfo(CPed* ped)
     }
 }
 
-static void GivePedWeapon(CPed* ped, eModelID modelId, eWeaponType weaponType, float weaponRange)
+static void GivePedWeaponAndSetInfo(CPed* ped, eModelID modelId, eWeaponType weaponType, float weaponRange)
 {
     CStreaming::RequestModel(modelId, STREAMING_MISSION_REQUIRED | STREAMING_KEEP_IN_MEMORY);
     CStreaming::LoadAllRequestedModels(false);
 
     // so we can restore the weapon info when mission ends
+    weaponSavedInfo = CWeaponSavedInfo();
     if (ped->DoWeHaveWeaponAvailable(weaponType)) {
         CWeapon& weapon = ped->m_aWeapons[ped->GetWeaponSlot(weaponType)];
         if (weapon.m_nType == weaponType) 
             weaponSavedInfo.wasInSlot = true;
         weaponSavedInfo.totalAmmo = weapon.m_nTotalAmmo;
     }
-    auto weaponInfo = CWeaponInfo::GetWeaponInfo(weaponType, 1);
+    auto weaponInfo = CWeaponInfo::GetWeaponInfo(weaponType, ped->GetWeaponSkill(weaponType));
     weaponSavedInfo.weaponType = weaponType;
     weaponSavedInfo.weaponRange = weaponInfo->m_fWeaponRange;
     weaponSavedInfo.targetRange = weaponInfo->m_fTargetRange;
@@ -332,7 +323,7 @@ static void OnTrainStartsMoving(CPlayerPed* pPlayer, CVector& cjSpawnPoint, std:
 
         enemies.reserve(4);
         GetPlayerEnemies(pPlayer, 150.0f, enemies);
-        GivePedWeapon(pPlayer, MODEL_TEC9, WEAPON_TEC9, 8.0f);
+        GivePedWeaponAndSetInfo(pPlayer, MODEL_TEC9, WEAPON_TEC9, 8.0f);
     }
 }
 
@@ -500,6 +491,7 @@ static void Mission_Process()
                     std::vector<CPed*> missionEnemies;
                     missionEnemies.reserve(4);
                     GetPlayerEnemies(pPlayer, 150.0f, missionEnemies);
+                    printf("Found %d enemies\n", enemies.size());
                     if (missionEnemies.size() >= 4) { // check if all 4 enemies have spawned and are attached to train
                         OnTrainStartsMoving(pPlayer, cjSpawnPoint, enemies, &bike);
                         if (bike)
@@ -523,11 +515,6 @@ static void Mission_Process()
                     missionState = eMissionState::BIKE_MOVING;
                 }
             }
-            break;
-        }
-        case eMissionState::BIKE_MOVING:
-        {
-            SetWeaponRange(pPlayer, 8.0f);
             break;
         }
         case eMissionState::ALL_ENEMIES_ARE_DEAD:
