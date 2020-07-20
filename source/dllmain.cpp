@@ -323,7 +323,7 @@ static void OnTrainStartsMoving(CPlayerPed* pPlayer, CVector& cjSpawnPoint, std:
 
         enemies.reserve(4);
         GetPlayerEnemies(pPlayer, 150.0f, enemies);
-        GivePedWeaponAndSetInfo(pPlayer, MODEL_TEC9, WEAPON_TEC9, 8.0f);
+        GivePedWeaponAndSetInfo(pPlayer, MODEL_TEC9, WEAPON_TEC9, 10.0f);
     }
 }
 
@@ -376,26 +376,26 @@ static bool LoadVehicleRecording(const char* fileName, std::int32_t recordingId)
     return false;
 }
 
-static bool PlayMissionVehicleRecording(CVehicle* vehicle, const char* fileName, std::int32_t& recordingId, std::int32_t& rrrNumber)
+static bool PlayMissionVehicleRecording(CVehicle* vehicle, const char* filePath, const char* fileName, std::int32_t& recordingId, std::int32_t& rrrNumber)
 {
     rrrNumber = -1;
     if (!sscanf(fileName, "carrec%d", &rrrNumber))
         sscanf(fileName, "CARREC%d", &rrrNumber);
     if (rrrNumber == -1) {
-        printf("Failed to read rrr number for file '%s'\n", fileName);
+        printf("Failed to read rrr number for file '%s'\n", filePath);
         return false;
     }
     if (recordingId == -1) {
         if (CVehicleRecording::NumPlayBackFiles >= TOTAL_RRR_MODEL_IDS) {
-            printf("Failed to load '%s'. All RRR slots are being used\n", fileName);
+            printf("Failed to load '%s'. All RRR slots are being used\n", filePath);
             return false;
         }
         recordingId = CVehicleRecording::RegisterRecordingFile(fileName);
         printf("recording id = %d\n", recordingId);
     }
-    printf("Attempting to load file '%s'\n", fileName);
-    if (!LoadVehicleRecording(fileName, recordingId)) {
-        printf("Failed to load file '%s'\n", fileName);
+    printf("Attempting to load file '%s'\n", filePath);
+    if (!LoadVehicleRecording(filePath, recordingId)) {
+        printf("Failed to load file '%s'\n", filePath);
         return false;
     }
     CVehicleRecording::StartPlaybackRecordedCar(vehicle, rrrNumber, 0, 0);
@@ -510,7 +510,9 @@ static void Mission_Process()
                 CVector targetPoint(0.0f, 0.0f, 0.0f);
                 pPlayer->GetTaskManager().SetTask(
                     new CTaskSimpleGangDriveBy(nullptr, &targetPoint, 200.0f, 30, 8, true), TASK_PRIMARY_PRIMARY);
-                if (PlayMissionVehicleRecording(pPlayer->m_pVehicle, "carrec968.rrr", vehicleRecordingId, rrrNumber)) {
+                std::string fileName = "carrec968.rrr";
+                std::string filePath = "scripts\\" + fileName;
+                if (PlayMissionVehicleRecording(pPlayer->m_pVehicle, filePath.c_str(), fileName.c_str(), vehicleRecordingId, rrrNumber)) {
                     CVehicleRecording::SetPlaybackSpeed(pPlayer->m_pVehicle, 0.8f);
                     missionState = eMissionState::BIKE_MOVING;
                 }
