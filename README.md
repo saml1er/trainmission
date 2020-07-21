@@ -5,6 +5,9 @@ In this Mod, big smoke will drive the bike in "Wrong Side Of The Tracks" mission
 ### Download
 You can download the latest version [here](https://github.com/saml1er/trainmission/releases). 
 
+### Mission Source Code
+The entire mission related source code is located in the `source/dllmain.cpp` file. 
+
 ### Build Instructions
 Please read the README file of [gta-reversed project](https://github.com/saml1er/gta-reversed) for build instructions.
 
