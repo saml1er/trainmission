@@ -1,9 +1,8 @@
 // dllmain.cpp : Defines the entry point for the DLL application.
 #include "StdInc.h"
 #include <ctime>
-#include<sstream>
-
-void InjectHooksMain(void);
+#include <Shlwapi.h>
+#pragma comment(lib, "shlwapi.lib")
 
 void DisplayConsole(void)
 {
@@ -17,34 +16,6 @@ void DisplayConsole(void)
 
 inline bool isKeyPressed(unsigned int keyCode) {
     return (GetKeyState(keyCode) & 0x8000) != 0;
-}
-
-std::string GetStr(int intValue)
-{
-    std::stringstream sstream;
-    sstream << intValue;
-    return sstream.str();
-}
-
-static void PrintTasks(CPed* ped)
-{
-    printf("ped modelId = %d | primary tasks:\n", ped->m_nModelIndex);
-    CTaskManager& taskManager = ped->GetTaskManager();
-    for (std::int32_t i = 0; i < TASK_PRIMARY_MAX; i++) {
-        CTask* pTask = taskManager.GetPrimaryTask(i);
-        if (pTask) {
-            std::string str = "primaryTask ";
-            str = str + GetStr(i) + ": " + GetStr(pTask->GetId()) + ", ";
-            if (!pTask->IsSimple()) {
-                for (CTask* pSubTask = pTask->GetSubTask(); pSubTask; pSubTask = pSubTask->GetSubTask()) {
-                    str = str + GetStr(pSubTask->GetId()) + ", ";
-                    if(pSubTask->IsSimple())
-                        break;
-                }
-            }
-            printf("%s\n", str.c_str());
-        }
-    }
 }
 
 const char* WRONG_SIDE_OF_THE_TRACKS_MISSION_NAME = "smoke3";
@@ -327,6 +298,23 @@ static void OnTrainStartsMoving(CPlayerPed* pPlayer, CVector& cjSpawnPoint, std:
     }
 }
 
+static char* GetModuleDirectory(char* dest, size_t destSize)
+{
+    if (!dest) return nullptr;
+    if (MAX_PATH > destSize) return nullptr;
+    HMODULE hm;
+    if (GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+        GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+        (LPWSTR)&GetModuleDirectory, &hm)) {
+        DWORD length = GetModuleFileNameA(hm, dest, destSize);
+        if (length > 0 && PathRemoveFileSpecA(dest)) {
+            return dest;
+        }
+    }
+    return nullptr;
+}
+
+
 static bool LoadVehicleRecording(const char* fileName, std::int32_t recordingId)
 {
     FILE* file = fopen(fileName, "rb");
@@ -440,14 +428,18 @@ static void Mission_Process()
     static std::int32_t rrrNumber = -1;
     static std::int32_t vehicleRecordingId = -1;
     static std::vector<CPed*> enemies;
+    static bool bFailedToLoadRRRFile = false;
     bool bRunningWrongSideOfTheTracksMission = IsRunningWrongSideOfTheTracksMission();
     if (!bRunningWrongSideOfTheTracksMission && missionState != eMissionState::NONE) {
         missionState = eMissionState::NONE;
+        bFailedToLoadRRRFile = false;
         bike = nullptr;
         bigSmoke = nullptr;
         enemies.resize(0);
         return;
     }
+    if (bFailedToLoadRRRFile)
+        return;
     if (bRunningWrongSideOfTheTracksMission && TheCamera.m_bWideScreenOn && missionState != eMissionState::NONE
         && missionState != eMissionState::DRIVING_TO_SMOKES_HOUSE && missionState != eMissionState::FAILED) {
         // cutscene has started, this means the train will now go out of sight
@@ -510,11 +502,20 @@ static void Mission_Process()
                 CVector targetPoint(0.0f, 0.0f, 0.0f);
                 pPlayer->GetTaskManager().SetTask(
                     new CTaskSimpleGangDriveBy(nullptr, &targetPoint, 200.0f, 30, 8, true), TASK_PRIMARY_PRIMARY);
+                char buffer[MAX_PATH];
+                if(!GetModuleDirectory(buffer, MAX_PATH)) {
+                    bFailedToLoadRRRFile = true;
+                    return;
+                }
                 std::string fileName = "carrec968.rrr";
-                std::string filePath = "scripts\\" + fileName;
+                std::string filePath(buffer);
+                filePath = filePath + "\\" + fileName;
                 if (PlayMissionVehicleRecording(pPlayer->m_pVehicle, filePath.c_str(), fileName.c_str(), vehicleRecordingId, rrrNumber)) {
                     CVehicleRecording::SetPlaybackSpeed(pPlayer->m_pVehicle, 0.8f);
                     missionState = eMissionState::BIKE_MOVING;
+                }
+                else {
+                    bFailedToLoadRRRFile = true;
                 }
             }
             break;
@@ -583,7 +584,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD  ul_reason_for_call, LPVOID lpReser
     switch (ul_reason_for_call)
     {
     case DLL_PROCESS_ATTACH:
-        DisplayConsole();
+        //DisplayConsole();
         HookInstall(0x53E972, TheHook);
         break;
     case DLL_THREAD_ATTACH:
